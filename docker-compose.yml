@@ -1,0 +1,138 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - microServicesNet
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    labels:
+      - "traefik.enable=false"
+    networks:
+      - microServicesNet
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  usermicroservice:
+    build: UserMicroService/user
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.user.rule=PathPrefix(`/api/user`)"
+      - "traefik.http.services.user.loadbalancer.server.port=8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://dbuser:5432/usersdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: admin
+    depends_on:
+      - dbuser
+    networks:
+      - microServicesNet
+
+  salamicroservice:
+    build: SalaMicroService/sala
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sala.rule=PathPrefix(`/api/sala`)"
+      - "traefik.http.services.sala.loadbalancer.server.port=8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://dbsala:5432/salasdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: admin
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: admin
+      RABBITMQ_PASSWORD: admin123
+    depends_on:
+      - dbsala
+      - rabbitmq
+    networks:
+      - microServicesNet
+
+  reservamicroservice:
+    build: ReservaMicroService/reserva
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.reserva.rule=PathPrefix(`/api/reserva`)"
+      - "traefik.http.services.reserva.loadbalancer.server.port=8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://dbreserva:5432/reservasdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: admin
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: admin
+      RABBITMQ_PASSWORD: admin123
+    depends_on:
+      - dbreserva
+      - rabbitmq
+    networks:
+      - microServicesNet
+
+  dbuser:
+    image: postgres:15
+    container_name: dbuser
+    restart: always
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: usersdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    networks:
+      - microServicesNet
+    volumes:
+      - userdbdata:/var/lib/postgresql/data
+
+  dbsala:
+    image: postgres:15
+    container_name: dbsala
+    restart: always
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: salasdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    networks:
+      - microServicesNet
+    volumes:
+      - saladbdata:/var/lib/postgresql/data
+
+  dbreserva:
+    image: postgres:15
+    container_name: dbreserva
+    restart: always
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_DB: reservasdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    networks:
+      - microServicesNet
+    volumes:
+      - reservadbdata:/var/lib/postgresql/data
+
+
+networks:
+  microServicesNet:
+
+volumes:
+  userdbdata:
+  saladbdata:
+  reservadbdata:
+  rabbitmq_data:
